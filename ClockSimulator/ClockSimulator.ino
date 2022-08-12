@@ -3,13 +3,10 @@
  Created:	8/2/2022 8:36:10 AM
  Author:	ThuanVo
 */
+
 // the setup function runs once when you press reset or power the board
-//#include <TM16XXFonts.h>
-//#include <TM16XX.h>
-//#include <TM1640.h>
-//#include <TM1638QYF.h>
-//#include <InvertedTM1638.h>
 #include <TM1638.h>
+
 
 //PIN
 #define stbPin 4
@@ -20,8 +17,6 @@
 
 #define NumberOfMode 6
 //Button function
-//Mode:		0				1			2			3			4			5			Num
-//		btnMode			btnMode		btnMode		btnMode		btnMode		btnMode			1
 #define btnMode 1 //used for all mode
 //Mode 0
 #define btnDigitInc		2
@@ -38,38 +33,38 @@
 #define btnDelayAlarm	6
 #define btnAckAlarm		7
 //#define btnBack		8 (same as mode0)
-
 //Mode 3
 
 
-
+TM1638	tm(dioPin, clkPin, stbPin);
 uint8_t mode;
 uint64_t startingTime = 0;
 uint64_t runningMilSecs = 0;
-TM1638	tm(dioPin, clkPin, stbPin);
 uint8_t	brightness = 1;
 struct datetime {
 	uint16_t year = 2022;
-	uint8_t month = 8;
-	uint8_t date = 8;
-	uint8_t day = 2;	//Sunday = 1
-	uint8_t hour = 11;
-	uint8_t minute = 47;
+	uint8_t month = 12;
+	uint8_t date = 6;
+	uint8_t day = 6;	//Sunday = 1
+	uint8_t hour = 22;
+	uint8_t minute = 2;
 	uint8_t second = 0;
 	uint8_t smallsec = 0;	// 100smallsec = 1s
 } time;
-
 uint8_t	arr[17]; // [0 y,y, 2 y,y, 4 m,m,6 d,d,8 day, 9 h,h,11 m,m,13 s,s,15 ss,ss,\0]
 uint8_t datesOfMonth[2][12] = { { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}, 
 								{31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 } };	//leap year
+bool btn[8];
 
 //Mode 0 global variable
 static uint8_t	cursor = 0;
-
 //Mode 2 global variable
-uint8_t alarmHour = 11;
-uint8_t	alarmMinute = 40;
+uint8_t alarmHour = 23;
+uint8_t	alarmMinute = 15;
 uint8_t	alarmCursor = 0;
+uint8_t alarmLastHour, alarmLastMinute;
+//Mode turn off: global variable
+//static uint16_t	k = 0;
 
 void TMInit(uint8_t brightness) {
 	tm.setupDisplay(true, brightness);
@@ -87,37 +82,44 @@ void setup() {
 	Serial.begin(9600);
 }
 
+void buttonsScan() {
+	bool arrBtn[2][8]; // arr[0][k] is the previous state, arr[1][k] is the next state
+
+	byte buttons = tm.getButtons();
+	for (uint8_t i = 1; i <= 8; i++) {
+		if ((buttons & (0x01 << (i - 1))) > 0) {
+			arrBtn[0][i - 1] = true;
+		}
+		else {
+			arrBtn[0][i - 1] = false;
+		}
+	}
+	delay(80);
+	buttons = tm.getButtons();
+	for (uint8_t i = 1; i <= 8; i++) {
+		if ((buttons & (0x01 << (i - 1))) > 0) {
+			arrBtn[1][i - 1] = true;
+		}
+		else {
+			arrBtn[1][i - 1] = false;
+		}
+	}
+	for (uint8_t i = 1; i <= 8; i++) {
+		if (arrBtn[0][i - 1] == false && arrBtn[1][i - 1] == true) {
+			//Serial.print("Button ");	//debug
+			//Serial.print(i);
+			//Serial.println(" is being pressed");
+			btn[i - 1] = true;
+		}
+		else {
+			btn[i - 1] = false;
+		}
+	}
+}
 
 bool isButton(uint8_t pos) {	//check if btn at pos (1:8) is pressed
-	uint8_t btnCode, btnCodeOld;
-
-	btnCode = tm.getButtons() & (0b00000001 << (pos - 1));
-	delay(80);		//reducing button bouncing
-	btnCodeOld = btnCode;
-	btnCode = tm.getButtons() & (0b00000001 << (pos - 1));
-	return (btnCode != 0) && (btnCodeOld == 0); 	//positive edge on btn 1
+	return btn[pos - 1];
 }
-
-//button debounce (not finished yet) *supplement, using interupt
-/*
-bool isButton_debounce(uint8_t pos) {	//check if btn at pos (1:8) is pressed
-	uint8_t btnCode ;
-	uint16_t	state = 0;
-	for (uint8_t i = 0; i < 16; i++) {
-		btnCode = tm.getButtons() & (0b00000001 << (pos - 1));
-		state <<= (state | btnCode);
-	}
-	return state == 0xffff;
-
-
-
-	//btnCode = tm.getButtons() & (0b00000001 << (pos - 1));
-	//delay(80);		//reducing button bouncing
-	//btnCodeOld = btnCode;
-	//btnCode = tm.getButtons() & (0b00000001 << (pos - 1));
-	//return (btnCode != 0) && (btnCodeOld == 0); 	//positive edge on btn 1
-}
-*/
 
 bool isModeChanged() {
 	if (isButton(btnMode)) {	//positive edge on btn 1
@@ -131,6 +133,8 @@ bool isModeChanged() {
 		//reset cursor in mode 2 to stop blinking
 		alarmCursor = 0;
 		return true;
+		//reset k in mode turn off
+		//k = 2;
 	}
 	else{}
 	return false;
@@ -138,7 +142,6 @@ bool isModeChanged() {
 
 bool isMillisOverflowed() {	
 	static uint64_t time_ms = 0;		//time_ms ONLY = 0 in the first cycle
-
 	//In case overflow of millis() (64bits)
 	//Cause millis() is always bigger than time_ms
 	//=> if millis() <= time_ms (overflow happens) -> reset time_ms = 0 and set new Startingtime
@@ -153,7 +156,7 @@ bool isMillisOverflowed() {
 	}
 }
 
-bool isOneSec() {				//*supplement: in case delay() makes 2sec elapsed instead of oneSec. Or move isOneSec to Interupt
+bool isOneSec() {
 	static uint64_t timeSec1 = 0;
 	uint64_t timeSec2;
 
@@ -178,7 +181,6 @@ bool isHalfSec() {	//seem not to be accurate
 	}
 	return false;
 }
-
 
 void splitTwoDigitsNum(uint8_t value, uint8_t digit[], uint8_t startAddr) {	//2022 must be split to 20 and 22 before using this
 	digit[startAddr] = value / 10;
@@ -208,6 +210,8 @@ void timeCalculator(uint64_t runningMilSecs, uint8_t *hour = &time.hour, uint8_t
 			if (++time.minute > 59) {
 				time.minute = 0;
 				if (++time.hour > 23) {
+					alarmLastHour = 0; //reset alarm
+					alarmLastMinute = 0;
 					time.hour = 0;
 					time.day = ((++time.day) % 8 == 0) ? 1 : time.day;
 					if (++time.date > datesOfMonth[(time.year % 4) == 0][time.month - 1]) {
@@ -222,26 +226,27 @@ void timeCalculator(uint64_t runningMilSecs, uint8_t *hour = &time.hour, uint8_t
 		}
 	}
 	else {}
-
 	storeDateTime();	
-
-	//print date&time to serial
+	//print date&time to serial - debug
 	{
-	Serial.print(time.date);
-	Serial.print("-");
-	Serial.print(time.month);
-	Serial.print("-");
-	Serial.print(time.year);
-	Serial.print("-");
-	Serial.println(time.day);
+		Serial.print("Date: ");
+		Serial.print(time.date);
+		Serial.print("-");
+		Serial.print(time.month);
+		Serial.print("-");
+		Serial.print(time.year);
+		Serial.print("-");
+		Serial.println(time.day);
 
-	Serial.print(time.hour);
-	Serial.print(":");
-	Serial.print(time.minute);
-	Serial.print(":");
-	Serial.print(time.second);
-	Serial.print(":");
-	Serial.println(time.smallsec);
+		Serial.print("Time: ");
+		Serial.print(time.hour);
+		Serial.print(":");
+		Serial.print(time.minute);
+		Serial.print(":");
+		Serial.print(time.second);
+		Serial.print(":");
+		Serial.println(time.smallsec);
+		//Serial.println("");
 	}
 }
 
@@ -409,21 +414,16 @@ void mode1(uint8_t *brightness) {
 
 void mode2() {
 	uint8_t	arrAlarm[4];
-
 	splitTwoDigitsNum(alarmHour, arrAlarm, 0);
 	splitTwoDigitsNum(alarmMinute, arrAlarm, 2);
-
-	tm.setDisplayToString("Alr1");
-
+	tm.setDisplayToString("Alr1",0b00010000);
 	tm.setDisplayDigit(arrAlarm[0], 4, false);
 	tm.setDisplayDigit(arrAlarm[1], 5, true);
 	tm.setDisplayDigit(arrAlarm[2], 6, false);
 	tm.setDisplayDigit(arrAlarm[3], 7, false);
-
 	if (isButton(btnCursor)) {
 		alarmCursor = (++alarmCursor) % 5;
 	}
-
 	switch (alarmCursor) {
 	case 0:
 		break;
@@ -511,14 +511,20 @@ void modeImplementation() {
 	timeCalculator(runningMilSecs);
 
 	//mode 2:
-	static uint8_t alarmLastHour, alarmLastMinute;
 	static uint16_t alarm2Min, alarmLast2Min = 0;
 	alarm2Min = alarmHour * 60 + alarmMinute;
-	Serial.print(alarm2Min);	//debug
-	Serial.print("--");
-	Serial.println(alarmLast2Min);
-	Serial.print("--");
-	Serial.println(time.hour*60 +time.minute);
+	//Serial.print(alarm2Min);	//debug
+	//Serial.print("--");
+	//Serial.println(alarmLast2Min);
+	//Serial.print("--");
+	//Serial.println(time.hour*60 +time.minute);
+	Serial.print("Alarm:");
+	Serial.print(alarmHour);
+	Serial.print(":");
+	Serial.print(alarmMinute);
+	Serial.println("");
+	Serial.println("");
+
 
 	if (!isButton(btnAckAlarm)) {	//if no ack then check alarm
 		if (alarmLast2Min < alarm2Min && (time.hour * 60 + time.minute >= alarm2Min)) {
@@ -526,13 +532,15 @@ void modeImplementation() {
 			alarmLastHour = time.hour;
 			alarmLastMinute = time.minute;
 			alarmLast2Min = alarmLastHour * 60 + alarmLastMinute;
+			Serial.println("Alarm triggered");//debug
+			//delay(300);//debug
 		}
 	}
 	else {	//if ack occurs then turn off alarm
 		digitalWrite(relayPin, true); //relay OFF
+		Serial.println("Alarm acknowledge");//debug
+		//delay(300);//debug
 	}
-
-
 
 	switch (mode) {		//mode < NumberOfMode
 	case 0://mode clock
@@ -544,46 +552,89 @@ void modeImplementation() {
 		tm.setLED(TM1638_COLOR_RED, 1);
 		mode1(&brightness);
 		break;
-	case 2:
+	case 2://mode alarm
 		tm.setLED(TM1638_COLOR_RED, 2);
 		mode2();
 		break;
 	case 3:
 		tm.setLED(TM1638_COLOR_RED, 3);
-
+		tm.setDisplayToString("no conf");
 		break;
 
 	case NumberOfMode - 1://Turn off
 		
 		//Blinking turn off notification
-		/* *supplement: this create errors for isOneSec() and isButton()
-		tm.setDisplayToString("turn off");
-		delay(1000);
-		tm.clearDisplay();
-		delay(500);
-		tm.setDisplayToString("turn off");
-		delay(1000);
-		*/
 		
+		////static uint16_t	k = 0;
+		//const uint16_t totalPeriod = 100;
+		//k = 0;
+		//while (1< k <= totalPeriod) {
+		//	if (k < totalPeriod / 4) tm.setDisplayToString("turn off");
+		//	else if (k < totalPeriod / 2) tm.clearDisplay();
+		//	else if (k < totalPeriod * 3 / 4) tm.setDisplayToString("turn off");
+		//	else if (k < totalPeriod) tm.clearDisplay();
+		//	else k = 0;
+		//	k++;
+		//	Serial.print("k =");
+		//	Serial.println(k);
+		//}
+
+		//tm.setDisplayToString("Turning ");
+		//tm.setDisplayToString("urning o");
+		//tm.setDisplayToString("rning of");
+		//tm.setDisplayToString("ning off");
+		//tm.setDisplayToString("ing off ");
+		//tm.setDisplayToString("ng off  ");
+		//tm.setDisplayToString("g off   ");
+		//tm.setDisplayToString(" off    ");
+		//tm.setDisplayToString("off    T");
+		//tm.setDisplayToString("ff    Tu");
+		//tm.setDisplayToString("f    Tur");
+		//tm.setDisplayToString("    Turn");
+		//tm.setDisplayToString("   Turni");
+		//tm.setDisplayToString("  Turnin");
+		//tm.setDisplayToString(" Turning");
+		//tm.setDisplayToString("Turning ");
+		//tm.setDisplayToString("urning o");
+		//tm.setDisplayToString("rning of");
+		//tm.setDisplayToString("ning off");
+		//tm.setDisplayToString("ing off ");
+		//tm.setDisplayToString("ng off  ");
+		//tm.setDisplayToString("g off   ");
+		//tm.setDisplayToString(" off    ");
+		//tm.setDisplayToString("ff      ");
+		//tm.setDisplayToString("f       ");
+		//tm.setDisplayToString("        ");
+
+
 		tm.setupDisplay(false, 0);
 		break;
-	default:
-		tm.setLEDs(0x0F);
-		tm.setDisplayToString(" no func");
 
+	default:
+		tm.setLEDs(0b10101010);
+		tm.setDisplayToString(" no func");
 		break;
 	}
+	
 }
 
 void clockSimulator() {
 	isModeChanged();
 	modeImplementation();
 }
+
+
+bool isButton2(uint8_t pos) {	//check if btn at pos (1:8) is pressed
+	uint8_t btnCode, btnCodeOld;
+
+	btnCode = tm.getButtons() & (1 << (pos - 1));
+	delay(80);		//reducing button bouncing
+	btnCodeOld = btnCode;
+	btnCode = tm.getButtons() & (1 << (pos - 1));
+	return (btnCode != 0) && (btnCodeOld == 0); 	//positive edge on btn 1
+}
+
 void loop() {
+	buttonsScan();		
 	clockSimulator();
-
-	if (tm.getButtons() > 0) {
-		Serial.println("buttons pressed");//debug
-
-	}
 }
