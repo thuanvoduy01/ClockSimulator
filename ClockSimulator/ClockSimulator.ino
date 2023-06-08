@@ -562,51 +562,6 @@ void modeImplementation() {
 		break;
 
 	case NumberOfMode - 1://Turn off
-		
-		//Blinking turn off notification
-		
-		////static uint16_t	k = 0;
-		//const uint16_t totalPeriod = 100;
-		//k = 0;
-		//while (1< k <= totalPeriod) {
-		//	if (k < totalPeriod / 4) tm.setDisplayToString("turn off");
-		//	else if (k < totalPeriod / 2) tm.clearDisplay();
-		//	else if (k < totalPeriod * 3 / 4) tm.setDisplayToString("turn off");
-		//	else if (k < totalPeriod) tm.clearDisplay();
-		//	else k = 0;
-		//	k++;
-		//	Serial.print("k =");
-		//	Serial.println(k);
-		//}
-
-		//tm.setDisplayToString("Turning ");
-		//tm.setDisplayToString("urning o");
-		//tm.setDisplayToString("rning of");
-		//tm.setDisplayToString("ning off");
-		//tm.setDisplayToString("ing off ");
-		//tm.setDisplayToString("ng off  ");
-		//tm.setDisplayToString("g off   ");
-		//tm.setDisplayToString(" off    ");
-		//tm.setDisplayToString("off    T");
-		//tm.setDisplayToString("ff    Tu");
-		//tm.setDisplayToString("f    Tur");
-		//tm.setDisplayToString("    Turn");
-		//tm.setDisplayToString("   Turni");
-		//tm.setDisplayToString("  Turnin");
-		//tm.setDisplayToString(" Turning");
-		//tm.setDisplayToString("Turning ");
-		//tm.setDisplayToString("urning o");
-		//tm.setDisplayToString("rning of");
-		//tm.setDisplayToString("ning off");
-		//tm.setDisplayToString("ing off ");
-		//tm.setDisplayToString("ng off  ");
-		//tm.setDisplayToString("g off   ");
-		//tm.setDisplayToString(" off    ");
-		//tm.setDisplayToString("ff      ");
-		//tm.setDisplayToString("f       ");
-		//tm.setDisplayToString("        ");
-
-
 		tm.setupDisplay(false, 0);
 		break;
 
